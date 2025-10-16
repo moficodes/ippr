@@ -15,9 +15,10 @@ spec:
       labels:
         app: ippr
     spec:
+      serviceAccountName: ippr
       containers:
       - name: ippr
-        image: us-docker.pkg.dev/mofilabs/kubecon/ippr:0.0.1
+        image: us-docker.pkg.dev/mofilabs/kubecon/ippr:v0.0.4
         ports:
         - containerPort: 8080
         resizePolicy:
@@ -32,7 +33,6 @@ spec:
           limits:
             cpu: "1000m"
             memory: "1024Mi"
-
 ---
 apiVersion: v1
 kind: Service

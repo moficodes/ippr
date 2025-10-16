@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -20,20 +21,31 @@ var namespace string
 var templates embed.FS
 
 func initKubeClient() error {
-	kubeconfig, err := getKubeConfig()
-	if err != nil {
-		return fmt.Errorf("failed to get kubeconfig: %w", err)
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		log.Printf("Application is running inside a Kubernetes cluster.")
+		var err error
+		clientset, err = getKubernetesClient()
+		if err != nil {
+			return fmt.Errorf("failed to get Kubernetes client: %w", err)
+		}
+	} else {
+		log.Printf("Application is NOT running inside a Kubernetes cluster.")
+		kubeconfig, err := getKubeConfig()
+		if err != nil {
+			return fmt.Errorf("failed to get kubeconfig: %w", err)
+		}
+
+		config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return fmt.Errorf("failed to build config from flags: %w", err)
+		}
+
+		clientset, err = kubernetes.NewForConfig(config)
+		if err != nil {
+			return fmt.Errorf("failed to create clientset: %w", err)
+		}
 	}
 
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return fmt.Errorf("failed to build config from flags: %w", err)
-	}
-
-	clientset, err = kubernetes.NewForConfig(config)
-	if err != nil {
-		return fmt.Errorf("failed to create clientset: %w", err)
-	}
 	return nil
 }
 
@@ -43,6 +55,25 @@ func getKubeConfig() (string, error) {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
 	return filepath.Join(home, ".kube", "config"), nil
+}
+
+// getKubernetesClient sets up the Kubernetes client configuration.
+// It prioritizes in-cluster configuration (for running inside a Pod).
+// If in-cluster config fails, it will attempt to use the local kubeconfig file
+// (useful for local development/testing outside the cluster).
+func getKubernetesClient() (*kubernetes.Clientset, error) {
+	// Try to get in-cluster config (standard for Pods)
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get in-cluster config: %w", err)
+	}
+
+	// Create the clientset
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create clientset: %w", err)
+	}
+	return clientset, nil
 }
 
 func main() {
@@ -63,6 +94,6 @@ func main() {
 	http.HandleFunc("/api/memInfo", memInfoHandler)
 	http.HandleFunc("/api/restarts", restartsHandler)
 	http.HandleFunc("/api/patch", patchHandler)
-	fmt.Println("Server starting on port 8080...")
+	log.Printf("Server starting on port 8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

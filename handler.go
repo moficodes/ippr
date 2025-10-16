@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 )
 
 func restartsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("received request for %s", r.URL.Path)
 
 	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
 	if err != nil {
@@ -48,10 +48,12 @@ func restartsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("received request for %s", r.URL.Path)
 
 	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Failed to get deployment: %v", err)
 		return
 	}
 
@@ -69,15 +71,18 @@ func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 	} else {
+		log.Println("No containers found in deployment")
 		http.Error(w, "No containers found in deployment", http.StatusInternalServerError)
 	}
 }
 
 func memInfoHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("received request for %s", r.URL.Path)
 
 	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("Failed to get deployment: %v", err)
 		return
 	}
 
@@ -94,6 +99,7 @@ func memInfoHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 	} else {
+		log.Println("No containers found in deployment")
 		http.Error(w, "No containers found in deployment", http.StatusInternalServerError)
 	}
 }
@@ -104,6 +110,7 @@ type PatchData struct {
 }
 
 func patchHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("received request for %s", r.URL.Path)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
@@ -116,7 +123,7 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	fmt.Printf("%+v\n", data)
+	log.Printf("%+v\n", data)
 
 	dep, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
 	if err != nil {
@@ -181,7 +188,7 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("%s\n", patchData)
+	log.Printf("%s\n", patchData)
 
 	_, err = clientset.AppsV1().Deployments(namespace).Patch(context.TODO(), dep.Name, k8sTypes.StrategicMergePatchType, patchData, metav1.PatchOptions{})
 	if err != nil {
@@ -190,13 +197,14 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("Deployment %s patched successfully with new resource values\n", deployment)
+	log.Printf("Deployment %s patched successfully with new resource values\n", deployment)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Deployment patched successfully"})
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("received request for %s", r.URL.Path)
 	tmpl, err := template.ParseFS(templates, "templates/index.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
