@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ippr-deployment
+  namespace: ippr
+  labels:
+    app: ippr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ippr
+  template:
+    metadata:
+      labels:
+        app: ippr
+    spec:
+      containers:
+      - name: ippr
+        image: us-docker.pkg.dev/mofilabs/kubecon/ippr:0.0.1
+        ports:
+        - containerPort: 8080
+        resizePolicy:
+        - resourceName: cpu
+          restartPolicy: NotRequired
+        - resourceName: memory
+          restartPolicy: RestartContainer
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            cpu: "1000m"
+            memory: "1024Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ippr-service
+  namespace: ippr
+spec:
+  selector:
+    app: ippr
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080

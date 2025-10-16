@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deployment Info</title>
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css">
+    <style>
+        body {
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .ui.card {
+            width: 400px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border-radius: 10px;
+        }
+        .header {
+            background-color: #4d90fe;
+            color: white;
+            border-top-left-radius: 10px !important;
+            border-top-right-radius: 10px !important;
+        }
+        .content {
+            padding: 20px;
+        }
+        .description {
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="ui card">
+        <div class="content">
+            <div class="header">Deployment Information</div>
+        </div>
+        <div class="content">
+            <div class="description">
+                <p><strong>CPU Limit:</strong> <span id="cpu-limit">Loading...</span></p>
+                <p><strong>CPU Request:</strong> <span id="cpu-request">Loading...</span></p>
+                <p><strong>Memory Limit:</strong> <span id="mem-limit">Loading...</span></p>
+                <p><strong>Memory Request:</strong> <span id="mem-request">Loading...</span></p>
+                <p><strong>Restarts:</strong> <span id="restarts">Loading...</span></p>
+            </div>
+        </div>
+        <div class="content">
+            <div>
+                <label for="cpu-slider">CPU</label>
+                <input type="range" id="cpu-slider" name="cpu" min="0.5" max="4" step="0.1" value="0.5">
+                <span id="cpu-slider-value">0.5</span>
+            </div>
+            <div>
+                <label for="mem-slider">Memory (Mi)</label>
+                <input type="range" id="mem-slider" name="mem" min="512" max="16384" step="128" value="512">
+                <span id="mem-slider-value">512</span>
+            </div>
+            <button class="ui primary button" id="update-btn" style="margin-top: 10px;">Update</button>
+        </div>
+    </div>
+
+    <script>
+        function fetchData() {
+            fetch('/api/cpuInfo')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('cpu-limit').innerText = data.limit;
+                    document.getElementById('cpu-request').innerText = data.request;
+                });
+
+            fetch('/api/memInfo')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('mem-limit').innerText = data.limit;
+                    document.getElementById('mem-request').innerText = data.request;
+                });
+            
+            fetch('/api/restarts')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('restarts').innerText = data.restarts;
+                });
+        }
+
+        fetchData(); // Initial fetch
+        setInterval(fetchData, 1000); // Update every second
+
+        const cpuSlider = document.getElementById('cpu-slider');
+        const memSlider = document.getElementById('mem-slider');
+        const cpuSliderValue = document.getElementById('cpu-slider-value');
+        const memSliderValue = document.getElementById('mem-slider-value');
+        const updateBtn = document.getElementById('update-btn');
+
+        cpuSliderValue.innerHTML = cpuSlider.value;
+        memSliderValue.innerHTML = memSlider.value;
+
+        cpuSlider.oninput = function() {
+            cpuSliderValue.innerHTML = this.value;
+        }
+        memSlider.oninput = function() {
+            memSliderValue.innerHTML = this.value;
+        }
+
+        updateBtn.onclick = function() {
+            const cpu = cpuSlider.value;
+            const memory = `${memSlider.value}Mi`;
+
+            fetch('/api/patch', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ cpu, memory }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Success:', data);
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+            });
+        }
+    </script>
+</body>
+</html>
