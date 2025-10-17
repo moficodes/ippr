@@ -9,7 +9,7 @@ spec:
   serviceAccountName: ippr
   containers:
   - name: ippr
-    image: us-docker.pkg.dev/mofilabs/kubecon/ippr:v0.0.5
+    image: us-docker.pkg.dev/mofilabs/kubecon/ippr:v0.0.6
     ports:
     - containerPort: 8080
     resizePolicy:
