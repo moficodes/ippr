@@ -14,7 +14,7 @@ import (
 )
 
 var clientset *kubernetes.Clientset
-var deployment string
+var podname string
 var namespace string
 
 //go:embed templates
@@ -81,12 +81,12 @@ func main() {
 		log.Fatalf("Failed to initialize Kubernetes client: %v", err)
 	}
 
-	deployment = os.Getenv("DEPLOYMENT_NAME")
 	namespace = os.Getenv("NAMESPACE")
+	podname = os.Getenv("POD_NAME")
 
-	if deployment == "" || namespace == "" {
-		deployment = "ippr-deployment"
+	if namespace == "" || podname == "" {
 		namespace = "ippr"
+		podname = "ippr"
 	}
 
 	http.HandleFunc("/", homeHandler)
@@ -97,3 +97,10 @@ func main() {
 	log.Printf("Server starting on port 8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
+
+/*
+
+kubectl patch pod -n ippr ippr-deployment-67f7c69b5c-zbwr2 --subresource resize --patch \
+  '{"spec":{"containers":[{"name":"ippr", "resources":{"requests":{"memory":"1200Mi"}, "limits":{"memory":"1200Mi"}}}]}}'
+
+*/

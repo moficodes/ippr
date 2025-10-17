@@ -10,33 +10,22 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 )
 
 func restartsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("received request for %s", r.URL.Path)
 
-	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	labelSelector := labels.Set(deployment.Spec.Selector.MatchLabels).String()
-	pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: labelSelector,
-	})
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var restartCount int32
-	for _, pod := range pods.Items {
-		for _, containerStatus := range pod.Status.ContainerStatuses {
-			restartCount += containerStatus.RestartCount
-		}
+
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		restartCount += containerStatus.RestartCount
 	}
 
 	data := map[string]int32{
@@ -49,17 +38,15 @@ func restartsHandler(w http.ResponseWriter, r *http.Request) {
 
 func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("received request for %s", r.URL.Path)
-
-	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Printf("Failed to get deployment: %v", err)
 		return
 	}
 
 	// Assuming the first container is the one we're interested in
-	if len(deployment.Spec.Template.Spec.Containers) > 0 {
-		resources := deployment.Spec.Template.Spec.Containers[0].Resources
+	if len(pod.Spec.Containers) > 0 {
+		resources := pod.Spec.Containers[0].Resources
 		cpuLimit := resources.Limits.Cpu().String()
 		cpuRequest := resources.Requests.Cpu().String()
 
@@ -79,15 +66,14 @@ func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 func memInfoHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("received request for %s", r.URL.Path)
 
-	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Printf("Failed to get deployment: %v", err)
 		return
 	}
 
-	if len(deployment.Spec.Template.Spec.Containers) > 0 {
-		resources := deployment.Spec.Template.Spec.Containers[0].Resources
+	if len(pod.Spec.Containers) > 0 {
+		resources := pod.Spec.Containers[0].Resources
 		memLimit := resources.Limits.Memory().String()
 		memRequest := resources.Requests.Memory().String()
 
@@ -125,23 +111,24 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("%+v\n", data)
 
-	dep, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deployment, metav1.GetOptions{})
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
-		http.Error(w, "Failed to get deployment: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if len(dep.Spec.Template.Spec.Containers) == 0 {
+	if len(pod.Spec.Containers) == 0 {
 		http.Error(w, "No containers found in deployment", http.StatusInternalServerError)
 		return
 	}
 
-	container := &dep.Spec.Template.Spec.Containers[0]
-	if container.Resources.Requests == nil {
-		container.Resources.Requests = make(corev1.ResourceList)
+	container := &pod.Spec.Containers[0]
+	res := container.Resources
+	if res.Requests == nil {
+		res.Requests = make(corev1.ResourceList)
 	}
-	if container.Resources.Limits == nil {
-		container.Resources.Limits = make(corev1.ResourceList)
+	if res.Limits == nil {
+		res.Limits = make(corev1.ResourceList)
 	}
 
 	// Update CPU
@@ -151,8 +138,8 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid CPU request value: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		container.Resources.Requests[corev1.ResourceCPU] = cpu
-		container.Resources.Limits[corev1.ResourceCPU] = cpu
+		res.Requests[corev1.ResourceCPU] = cpu
+		res.Limits[corev1.ResourceCPU] = cpu
 	}
 
 	// Update Memory
@@ -162,21 +149,17 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid Memory request value: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		container.Resources.Requests[corev1.ResourceMemory] = memory
-		container.Resources.Limits[corev1.ResourceMemory] = memory
+		res.Requests[corev1.ResourceMemory] = memory
+		res.Limits[corev1.ResourceMemory] = memory
 	}
 
 	patch := map[string]any{
 		"spec": map[string]any{
-			"template": map[string]any{
-				"spec": map[string]any{
-					"containers": []map[string]any{
-						// add container in this array
-						{
-							"name":      container.Name,
-							"resources": container.Resources,
-						},
-					},
+			"containers": []map[string]any{
+				// add container in this array
+				{
+					"name":      container.Name,
+					"resources": res,
 				},
 			},
 		},
@@ -190,14 +173,14 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("%s\n", patchData)
 
-	_, err = clientset.AppsV1().Deployments(namespace).Patch(context.TODO(), dep.Name, k8sTypes.StrategicMergePatchType, patchData, metav1.PatchOptions{})
+	_, err = clientset.CoreV1().Pods(namespace).Patch(context.TODO(), pod.Name, k8sTypes.StrategicMergePatchType, patchData, metav1.PatchOptions{}, "resize")
 	if err != nil {
-		http.Error(w, "Failed to update deployment: "+err.Error(), http.StatusInternalServerError)
-		log.Printf("Failed to update deployment: %v", err)
+		http.Error(w, "Failed to update pod: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("Failed to update pod: %v", err)
 		return
 	}
 
-	log.Printf("Deployment %s patched successfully with new resource values\n", deployment)
+	log.Printf("Deployment %s patched successfully with new resource values\n", podname)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Deployment patched successfully"})
