@@ -14,8 +14,6 @@ import (
 )
 
 func restartsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("received request for %s", r.URL.Path)
-
 	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -37,7 +35,6 @@ func restartsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("received request for %s", r.URL.Path)
 	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -64,8 +61,6 @@ func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func memInfoHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("received request for %s", r.URL.Path)
-
 	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -96,7 +91,6 @@ type PatchData struct {
 }
 
 func patchHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("received request for %s", r.URL.Path)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
@@ -187,7 +181,6 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("received request for %s", r.URL.Path)
 	tmpl, err := template.ParseFS(templates, "templates/index.html")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

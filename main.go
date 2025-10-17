@@ -89,11 +89,11 @@ func main() {
 		podname = "ippr"
 	}
 
-	http.HandleFunc("/", homeHandler)
-	http.HandleFunc("/api/cpuInfo", cpuInfoHandler)
-	http.HandleFunc("/api/memInfo", memInfoHandler)
-	http.HandleFunc("/api/restarts", restartsHandler)
-	http.HandleFunc("/api/patch", patchHandler)
+	http.HandleFunc("/", loggingMiddleware(http.HandlerFunc(homeHandler)))
+	http.HandleFunc("/api/cpuInfo", loggingMiddleware(http.HandlerFunc(cpuInfoHandler)))
+	http.HandleFunc("/api/memInfo", loggingMiddleware(http.HandlerFunc(memInfoHandler)))
+	http.HandleFunc("/api/restarts", loggingMiddleware(http.HandlerFunc(restartsHandler)))
+	http.HandleFunc("/api/patch", loggingMiddleware(http.HandlerFunc(patchHandler)))
 	log.Printf("Server starting on port 8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
