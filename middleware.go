@@ -1,9 +1,7 @@
 package main
 
 import (
-	"log/slog"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -27,8 +25,6 @@ func loggingMiddleware(next http.Handler) http.HandlerFunc {
 
 		rw := newResponseWriter(w)
 		next.ServeHTTP(rw, r)
-
-		logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 		logger.Info("request completed",
 			"method", r.Method,
 			"url", r.URL.String(),

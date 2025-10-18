@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+var logger *slog.Logger
 var clientset *kubernetes.Clientset
 var podname string
 var namespace string
@@ -83,6 +85,7 @@ func main() {
 
 	namespace = os.Getenv("NAMESPACE")
 	podname = os.Getenv("POD_NAME")
+	logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
 	if namespace == "" || podname == "" {
 		namespace = "ippr"
@@ -94,13 +97,8 @@ func main() {
 	http.HandleFunc("/api/memInfo", loggingMiddleware(http.HandlerFunc(memInfoHandler)))
 	http.HandleFunc("/api/restarts", loggingMiddleware(http.HandlerFunc(restartsHandler)))
 	http.HandleFunc("/api/patch", loggingMiddleware(http.HandlerFunc(patchHandler)))
+	http.HandleFunc("/api/podspec", loggingMiddleware(http.HandlerFunc(podSpec)))
+	http.HandleFunc("/healthz", healthHandler)
 	log.Printf("Server starting on port 8080...")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
-
-/*
-
-kubectl patch pod -n ippr ippr-deployment-67f7c69b5c-zbwr2 --subresource resize --patch \
-  '{"spec":{"containers":[{"name":"ippr", "resources":{"requests":{"memory":"1200Mi"}, "limits":{"memory":"1200Mi"}}}]}}'
-
-*/

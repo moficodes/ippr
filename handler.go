@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"html/template"
-	"log"
+
 	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/yaml"
 )
 
 func restartsHandler(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +56,8 @@ func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 	} else {
-		log.Println("No containers found in deployment")
-		http.Error(w, "No containers found in deployment", http.StatusInternalServerError)
+		logger.Error("No containers found with given name", "pod", podname)
+		http.Error(w, "No containers found with given name", http.StatusInternalServerError)
 	}
 }
 
@@ -80,8 +81,8 @@ func memInfoHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 	} else {
-		log.Println("No containers found in deployment")
-		http.Error(w, "No containers found in deployment", http.StatusInternalServerError)
+		logger.Error("No containers found with given name", "pod", podname)
+		http.Error(w, "No containers found with given name", http.StatusInternalServerError)
 	}
 }
 
@@ -99,11 +100,10 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 	var data PatchData
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		http.Error(w, "Error decoding request body: "+err.Error(), http.StatusBadRequest)
+		logger.Error("Error decoding request body", "error", err.Error())
 		return
 	}
 	defer r.Body.Close()
-
-	log.Printf("%+v\n", data)
 
 	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
 	if err != nil {
@@ -112,7 +112,8 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(pod.Spec.Containers) == 0 {
-		http.Error(w, "No containers found in deployment", http.StatusInternalServerError)
+		http.Error(w, "No containers found with given name", http.StatusInternalServerError)
+		logger.Error("No containers found with given name", "pod", podname)
 		return
 	}
 
@@ -130,6 +131,7 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 		cpu, err := resource.ParseQuantity(data.CPU)
 		if err != nil {
 			http.Error(w, "Invalid CPU request value: "+err.Error(), http.StatusBadRequest)
+			logger.Error("Invalid CPU request value", "error", err.Error())
 			return
 		}
 		res.Requests[corev1.ResourceCPU] = cpu
@@ -141,6 +143,7 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 		memory, err := resource.ParseQuantity(data.Memory)
 		if err != nil {
 			http.Error(w, "Invalid Memory request value: "+err.Error(), http.StatusBadRequest)
+			logger.Error("Invalid Memory request value", "error", err.Error())
 			return
 		}
 		res.Requests[corev1.ResourceMemory] = memory
@@ -162,22 +165,41 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 	patchData, err := json.Marshal(patch)
 	if err != nil {
 		http.Error(w, "Data is not valid JSON: "+err.Error(), http.StatusInternalServerError)
+		logger.Error("Data is not valid JSON", "error", err.Error())
 		return
 	}
-
-	log.Printf("%s\n", patchData)
-
 	_, err = clientset.CoreV1().Pods(namespace).Patch(context.TODO(), pod.Name, k8sTypes.StrategicMergePatchType, patchData, metav1.PatchOptions{}, "resize")
 	if err != nil {
 		http.Error(w, "Failed to update pod: "+err.Error(), http.StatusInternalServerError)
-		log.Printf("Failed to update pod: %v", err)
+		logger.Error("Failed to update pod", "error", err.Error())
 		return
 	}
-
-	log.Printf("Deployment %s patched successfully with new resource values\n", podname)
+	logger.Info("Pod patched successfully with new resource values", "podname", podname)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Deployment patched successfully"})
+}
+
+func podSpec(w http.ResponseWriter, r *http.Request) {
+	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	spec, err := yaml.Marshal(pod)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/yaml")
+	w.Write(spec)
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {

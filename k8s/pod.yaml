@@ -7,16 +7,17 @@ metadata:
     app: ippr
 spec:
   serviceAccountName: ippr
+  restartPolicy: Always
   containers:
   - name: ippr
-    image: us-docker.pkg.dev/mofilabs/kubecon/ippr:v0.0.6
+    image: us-docker.pkg.dev/mofilabs/kubecon/ippr:v0.0.7
     ports:
     - containerPort: 8080
     resizePolicy:
     - resourceName: cpu
       restartPolicy: NotRequired
     - resourceName: memory
-      restartPolicy: NotRequired
+      restartPolicy: RestartContainer
     resources:
       requests:
         memory: "512Mi"
@@ -24,3 +25,15 @@ spec:
       limits:
         cpu: "500m"
         memory: "512Mi"
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 3
+      periodSeconds: 5
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 8080
+      initialDelaySeconds: 2
+
