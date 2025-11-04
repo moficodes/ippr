@@ -17,6 +17,7 @@ import (
 var logger *slog.Logger
 var clientset *kubernetes.Clientset
 var podname string
+var deploymentName string
 var namespace string
 
 //go:embed templates
@@ -85,11 +86,13 @@ func main() {
 
 	namespace = os.Getenv("NAMESPACE")
 	podname = os.Getenv("POD_NAME")
+	deploymentName = os.Getenv("DEPLOYMENT")
 	logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	if namespace == "" || podname == "" {
+	if namespace == "" || podname == "" || deploymentName == "" {
 		namespace = "ippr"
 		podname = "ippr"
+		deploymentName = "ippr"
 	}
 
 	http.HandleFunc("/", loggingMiddleware(http.HandlerFunc(homeHandler)))

@@ -5,7 +5,7 @@ metadata:
   namespace: ippr
 rules:
 - apiGroups: ["", "apps"] # "" indicates the core API group
-  resources: ["pods", "pods/resize"]
+  resources: ["pods", "pods/resize", "deployments"]
   verbs: ["get", "list", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"html/template"
 
 	"net/http"
@@ -10,21 +11,33 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 )
 
 func restartsHandler(w http.ResponseWriter, r *http.Request) {
-	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
+
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deploymentName, metav1.GetOptions{})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	labelSelector := labels.Set(deployment.Spec.Selector.MatchLabels).String()
+	pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var restartCount int32
-
-	for _, containerStatus := range pod.Status.ContainerStatuses {
-		restartCount += containerStatus.RestartCount
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			restartCount += containerStatus.RestartCount
+		}
 	}
 
 	data := map[string]int32{
@@ -35,8 +48,38 @@ func restartsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(data)
 }
 
+func getOnePod() (*corev1.Pod, error) {
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deploymentName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
+	if err != nil {
+		return nil, err
+	}
+
+	listOptions := metav1.ListOptions{
+		LabelSelector: selector.String(),
+	}
+
+	pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), listOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(pods.Items) == 0 {
+		return nil, errors.New("No pods found for the given deployment")
+	}
+
+	pod := pods.Items[0]
+
+	return &pod, nil
+}
+
 func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
-	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
+	pod, err := getOnePod()
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -62,7 +105,8 @@ func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func memInfoHandler(w http.ResponseWriter, r *http.Request) {
-	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
+	pod, err := getOnePod()
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -103,85 +147,105 @@ func patchHandler(w http.ResponseWriter, r *http.Request) {
 		logger.Error("Error decoding request body", "error", err.Error())
 		return
 	}
+
 	defer r.Body.Close()
 
-	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
+	deployment, err := clientset.AppsV1().Deployments(namespace).Get(context.TODO(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if len(pod.Spec.Containers) == 0 {
-		http.Error(w, "No containers found with given name", http.StatusInternalServerError)
-		logger.Error("No containers found with given name", "pod", podname)
+	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	container := &pod.Spec.Containers[0]
-	res := container.Resources
-	if res.Requests == nil {
-		res.Requests = make(corev1.ResourceList)
-	}
-	if res.Limits == nil {
-		res.Limits = make(corev1.ResourceList)
+	listOptions := metav1.ListOptions{
+		LabelSelector: selector.String(),
 	}
 
-	// Update CPU
-	if data.CPU != "" {
-		cpu, err := resource.ParseQuantity(data.CPU)
-		if err != nil {
-			http.Error(w, "Invalid CPU request value: "+err.Error(), http.StatusBadRequest)
-			logger.Error("Invalid CPU request value", "error", err.Error())
+	pods, err := clientset.CoreV1().Pods(namespace).List(context.TODO(), listOptions)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, pod := range pods.Items {
+		if len(pod.Spec.Containers) == 0 {
+			http.Error(w, "No containers found with given name", http.StatusInternalServerError)
+			logger.Error("No containers found with given name", "pod", podname)
 			return
 		}
-		res.Requests[corev1.ResourceCPU] = cpu
-		res.Limits[corev1.ResourceCPU] = cpu
-	}
 
-	// Update Memory
-	if data.Memory != "" {
-		memory, err := resource.ParseQuantity(data.Memory)
-		if err != nil {
-			http.Error(w, "Invalid Memory request value: "+err.Error(), http.StatusBadRequest)
-			logger.Error("Invalid Memory request value", "error", err.Error())
-			return
+		container := &pod.Spec.Containers[0]
+		res := container.Resources
+		if res.Requests == nil {
+			res.Requests = make(corev1.ResourceList)
 		}
-		res.Requests[corev1.ResourceMemory] = memory
-		res.Limits[corev1.ResourceMemory] = memory
-	}
+		if res.Limits == nil {
+			res.Limits = make(corev1.ResourceList)
+		}
 
-	patch := map[string]any{
-		"spec": map[string]any{
-			"containers": []map[string]any{
-				// add container in this array
-				{
-					"name":      container.Name,
-					"resources": res,
+		// Update CPU
+		if data.CPU != "" {
+			cpu, err := resource.ParseQuantity(data.CPU)
+			if err != nil {
+				http.Error(w, "Invalid CPU request value: "+err.Error(), http.StatusBadRequest)
+				logger.Error("Invalid CPU request value", "error", err.Error())
+				return
+			}
+			res.Requests[corev1.ResourceCPU] = cpu
+			res.Limits[corev1.ResourceCPU] = cpu
+		}
+
+		// Update Memory
+		if data.Memory != "" {
+			memory, err := resource.ParseQuantity(data.Memory)
+			if err != nil {
+				http.Error(w, "Invalid Memory request value: "+err.Error(), http.StatusBadRequest)
+				logger.Error("Invalid Memory request value", "error", err.Error())
+				return
+			}
+			res.Requests[corev1.ResourceMemory] = memory
+			res.Limits[corev1.ResourceMemory] = memory
+		}
+
+		patch := map[string]any{
+			"spec": map[string]any{
+				"containers": []map[string]any{
+					// add container in this array
+					{
+						"name":      container.Name,
+						"resources": res,
+					},
 				},
 			},
-		},
-	}
+		}
 
-	patchData, err := json.Marshal(patch)
-	if err != nil {
-		http.Error(w, "Data is not valid JSON: "+err.Error(), http.StatusInternalServerError)
-		logger.Error("Data is not valid JSON", "error", err.Error())
-		return
+		patchData, err := json.Marshal(patch)
+		if err != nil {
+			http.Error(w, "Data is not valid JSON: "+err.Error(), http.StatusInternalServerError)
+			logger.Error("Data is not valid JSON", "error", err.Error())
+			return
+		}
+		_, err = clientset.CoreV1().Pods(namespace).Patch(context.TODO(), pod.Name, k8sTypes.StrategicMergePatchType, patchData, metav1.PatchOptions{}, "resize")
+		if err != nil {
+			http.Error(w, "Failed to update pod: "+err.Error(), http.StatusInternalServerError)
+			logger.Error("Failed to update pod", "error", err.Error())
+			return
+		}
+		logger.Info("Pod patched successfully with new resource values", "podname", pod.Name)
 	}
-	_, err = clientset.CoreV1().Pods(namespace).Patch(context.TODO(), pod.Name, k8sTypes.StrategicMergePatchType, patchData, metav1.PatchOptions{}, "resize")
-	if err != nil {
-		http.Error(w, "Failed to update pod: "+err.Error(), http.StatusInternalServerError)
-		logger.Error("Failed to update pod", "error", err.Error())
-		return
-	}
-	logger.Info("Pod patched successfully with new resource values", "podname", podname)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Deployment patched successfully"})
 }
 
 func podSpec(w http.ResponseWriter, r *http.Request) {
-	pod, err := clientset.CoreV1().Pods(namespace).Get(context.TODO(), podname, metav1.GetOptions{})
+	pod, err := getOnePod()
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
