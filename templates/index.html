@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Deployment Info</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,17 +17,20 @@
             height: 100vh;
             margin: 0;
         }
+
         .container {
             display: flex;
             flex-direction: column;
             gap: 20px;
             width: 900px;
         }
+
         .top-row {
             display: flex;
             gap: 20px;
             justify-content: space-between;
         }
+
         .ui.card {
             background-color: #f9f9f9;
             border-radius: 15px;
@@ -37,38 +41,47 @@
             flex-direction: column;
             text-align: center;
         }
+
         .top-row .ui.card {
             flex: 1;
         }
+
         .ui.card .header {
             background: none;
-            color: #4285F4; /* Google Blue */
+            color: #4285F4;
+            /* Google Blue */
             font-size: 1.5em;
             font-weight: 600;
             padding-top: 20px;
             border: none;
         }
+
         .content {
             padding: 20px;
             flex-grow: 1;
         }
+
         .description p {
             font-size: 2em;
             margin-bottom: 10px;
         }
+
         .description strong {
             font-weight: 600;
             display: block;
             font-size: 0.6em;
             color: #777;
         }
+
         .slider-container {
             margin-bottom: 20px;
         }
+
         .slider-container label {
             font-size: 1.2em;
             font-weight: 400;
         }
+
         input[type=range] {
             -webkit-appearance: none;
             width: 100%;
@@ -78,41 +91,55 @@
             outline: none;
             margin-top: 10px;
         }
+
         input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
             width: 25px;
             height: 25px;
-            background: #4285F4; /* Google Blue */
+            background: #4285F4;
+            /* Google Blue */
             border-radius: 50%;
             cursor: pointer;
-            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
         }
+
         input[type=range]::-moz-range-thumb {
             width: 25px;
             height: 25px;
-            background: #4285F4; /* Google Blue */
+            background: #4285F4;
+            /* Google Blue */
             border-radius: 50%;
             cursor: pointer;
         }
+
         .slider-value {
             font-size: 1.2em;
             font-weight: 600;
             color: #333;
         }
+
         .ui.primary.button {
-            background-color: #4285F4; /* Google Blue */
+            background-color: #4285F4;
+            /* Google Blue */
             padding: 1rem;
             color: #fff;
             font-weight: 600;
             border-radius: 8px;
             transition: background-color 0.3s;
         }
+
         .ui.primary.button:hover {
-            background-color: #0F9D58; /* Google Green */
+            background-color: #0F9D58;
+            /* Google Green */
+        }
+
+        .status {
+            font-size: 1rem;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="top-row">
@@ -122,6 +149,7 @@
                     <div class="description">
                         <p><span id="cpu-limit">Loading...</span><strong>Limit</strong></p>
                         <p><span id="cpu-request">Loading...</span><strong>Request</strong></p>
+                        <p><span id="cpu-allocated">Loading...</span><strong>Allocated</strong></p>
                     </div>
                 </div>
             </div>
@@ -131,6 +159,7 @@
                     <div class="description">
                         <p><span id="mem-limit">Loading...</span><strong>Limit</strong></p>
                         <p><span id="mem-request">Loading...</span><strong>Request</strong></p>
+                        <p><span id="mem-allocated">Loading...</span><strong>Allocated</strong></p>
                     </div>
                 </div>
             </div>
@@ -141,18 +170,24 @@
                         <p><span id="restarts">Loading...</span></p>
                     </div>
                 </div>
+                <div class="content">
+                    <div class="header">Pod Status</div>
+                    <div class="description">
+                        <p><span id="status" class="status">Loading...</span></p>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="ui card">
             <div class="content">
                 <div class="slider-container">
                     <label for="cpu-slider">CPU</label>
-                    <input type="range" id="cpu-slider" name="cpu" min="0.5" max="4" step="0.1" value="0.5">
+                    <input type="range" id="cpu-slider" name="cpu" min="0.5" max="6" step="0.1" value="0.5">
                     <span class="slider-value" id="cpu-slider-value">0.5</span>
                 </div>
                 <div class="slider-container">
                     <label for="mem-slider">Memory (Mi)</label>
-                    <input type="range" id="mem-slider" name="mem" min="512" max="16384" step="128" value="512">
+                    <input type="range" id="mem-slider" name="mem" min="512" max="24576" step="128" value="512">
                     <span class="slider-value" id="mem-slider-value">512</span>
                 </div>
                 <button class="ui primary button" id="update-btn" style="margin-top: 10px;">Update</button>
@@ -167,6 +202,7 @@
                 .then(data => {
                     document.getElementById('cpu-limit').innerText = data.limit;
                     document.getElementById('cpu-request').innerText = data.request;
+                    document.getElementById('cpu-allocated').innerText = data.allocated;
                 });
 
             fetch('/api/memInfo')
@@ -174,12 +210,19 @@
                 .then(data => {
                     document.getElementById('mem-limit').innerText = data.limit;
                     document.getElementById('mem-request').innerText = data.request;
+                    document.getElementById('mem-allocated').innerText = data.allocated;
                 });
-            
+
             fetch('/api/restarts')
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('restarts').innerText = data.restarts;
+                });
+
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('status').innerText = data.status;
                 });
         }
 
@@ -195,14 +238,14 @@
         cpuSliderValue.innerHTML = cpuSlider.value;
         memSliderValue.innerHTML = memSlider.value;
 
-        cpuSlider.oninput = function() {
+        cpuSlider.oninput = function () {
             cpuSliderValue.innerHTML = this.value;
         }
-        memSlider.oninput = function() {
+        memSlider.oninput = function () {
             memSliderValue.innerHTML = this.value;
         }
 
-        updateBtn.onclick = function() {
+        updateBtn.onclick = function () {
             const cpu = cpuSlider.value;
             const memory = `${memSlider.value}Mi`;
 
@@ -213,19 +256,20 @@
                 },
                 body: JSON.stringify({ cpu, memory }),
             })
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log('Success:', data);
-            })
-            .catch((error) => {
-                console.error('Error:', error);
-            });
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Success:', data);
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
         }
     </script>
 </body>
+
 </html>

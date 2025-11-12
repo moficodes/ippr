@@ -90,16 +90,18 @@ func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 		resources := pod.Spec.Containers[0].Resources
 		cpuLimit := resources.Limits.Cpu().String()
 		cpuRequest := resources.Requests.Cpu().String()
+		cpuAllocated := pod.Status.ContainerStatuses[0].AllocatedResources.Cpu().String()
 
 		data := map[string]string{
-			"limit":   cpuLimit,
-			"request": cpuRequest,
+			"limit":     cpuLimit,
+			"request":   cpuRequest,
+			"allocated": cpuAllocated,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 	} else {
-		logger.Error("No containers found with given name", "pod", podname)
+		logger.Error("No containers found with given name", "deployment", deploymentName)
 		http.Error(w, "No containers found with given name", http.StatusInternalServerError)
 	}
 }
@@ -116,18 +118,43 @@ func memInfoHandler(w http.ResponseWriter, r *http.Request) {
 		resources := pod.Spec.Containers[0].Resources
 		memLimit := resources.Limits.Memory().String()
 		memRequest := resources.Requests.Memory().String()
-
+		memAllocated := pod.Status.ContainerStatuses[0].AllocatedResources.Memory().String()
 		data := map[string]string{
-			"limit":   memLimit,
-			"request": memRequest,
+			"limit":     memLimit,
+			"request":   memRequest,
+			"allocated": memAllocated,
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(data)
 	} else {
-		logger.Error("No containers found with given name", "pod", podname)
+		logger.Error("No containers found with given name", "deployment", deploymentName)
 		http.Error(w, "No containers found with given name", http.StatusInternalServerError)
 	}
+}
+
+func statusHandler(w http.ResponseWriter, r *http.Request) {
+	pod, err := getOnePod()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	status := "None"
+
+	if len(pod.Spec.Containers) > 0 {
+		condition := pod.Status.Conditions[0]
+		status = string(condition.Type)
+		data := map[string]string{
+			"status": status,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(data)
+	} else {
+		logger.Error("No containers found with given name", "deployment", deploymentName)
+		http.Error(w, "No containers found with given name", http.StatusInternalServerError)
+	}
+
 }
 
 type PatchData struct {

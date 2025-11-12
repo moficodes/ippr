@@ -100,6 +100,7 @@ func main() {
 	http.HandleFunc("/api/memInfo", loggingMiddleware(http.HandlerFunc(memInfoHandler)))
 	http.HandleFunc("/api/restarts", loggingMiddleware(http.HandlerFunc(restartsHandler)))
 	http.HandleFunc("/api/patch", loggingMiddleware(http.HandlerFunc(patchHandler)))
+	http.HandleFunc("/api/status", loggingMiddleware(http.HandlerFunc(statusHandler)))
 	http.HandleFunc("/api/podspec", loggingMiddleware(http.HandlerFunc(podSpec)))
 	http.HandleFunc("/healthz", healthHandler)
 	log.Printf("Server starting on port 8080...")
